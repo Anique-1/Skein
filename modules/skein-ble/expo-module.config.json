@@ -1,0 +1,7 @@
+{
+  "name": "skein-ble",
+  "platforms": ["android"],
+  "android": {
+    "modules": ["com.skein.mesh.ble.SkeinBleModule"]
+  }
+}

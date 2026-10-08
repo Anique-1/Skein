@@ -1,0 +1,7 @@
+{
+  "name": "skein-ble",
+  "version": "1.0.0",
+  "description": "Offline peer-to-peer Bluetooth mesh module for Skein",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}
