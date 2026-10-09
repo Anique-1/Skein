@@ -45,6 +45,15 @@
     },
     "plugins": [
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#15111F",
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Skein uses your rough location to place you in a chat for your area. Your coordinates are never saved or sent."

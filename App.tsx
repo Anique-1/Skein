@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initNotifications } from './src/notifications';
 import { makeId } from './src/mesh/ids';
@@ -11,6 +12,9 @@ import SkeinLogo from './src/components/SkeinLogo';
 import { loadState, randomName, saveState } from './src/storage';
 import { colors, fonts } from './src/theme';
 
+// Keep the splash screen visible while loading resources
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
   const [ready, setReady] = useState(false);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -18,16 +22,22 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      // Initialize notifications
-      initNotifications().catch(() => {});
-      const saved = await loadState();
-      if (saved) {
-        setIdentity(saved.identity);
-        setOnboarded(saved.onboarded);
-      } else {
+      try {
+        initNotifications().catch(() => {});
+        const saved = await loadState();
+        if (saved) {
+          setIdentity(saved.identity);
+          setOnboarded(saved.onboarded);
+        } else {
+          setIdentity({ id: makeId(16), name: randomName() });
+        }
+      } catch {
+        // Fallback identity
         setIdentity({ id: makeId(16), name: randomName() });
+      } finally {
+        setReady(true);
+        await SplashScreen.hideAsync().catch(() => {});
       }
-      setReady(true);
     })();
   }, []);
 
@@ -79,4 +89,3 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
-
