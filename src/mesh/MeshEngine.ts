@@ -1,5 +1,7 @@
 import { ANNOUNCE_EVERY_MS, MAX_TTL, PEER_TIMEOUT_MS, SEEN_CACHE_SIZE } from '../config';
+import { decryptDirectMessage, encryptDirectMessage } from './crypto';
 import { makeId } from './ids';
+import { computeProofOfWork } from './pow';
 import { ChatMessage, Identity, Packet, Peer, Transport } from './types';
 
 export interface EngineState {
@@ -11,10 +13,11 @@ export interface EngineState {
 type Listener = () => void;
 
 /**
- * Flood-with-TTL relay. Every phone:
+ * Flood-with-TTL relay with End-to-End Encryption (E2EE) for DMs.
+ * Every phone:
  *  1. ignores packets it has already seen (loop prevention),
- *  2. keeps packets meant for it,
- *  3. forwards everything else with ttl-1 after a tiny random delay.
+ *  2. keeps & decrypts packets meant for it,
+ *  3. forwards encrypted packets with ttl-1 after a tiny random delay.
  */
 export class MeshEngine {
   private seen = new Map<string, number>();
@@ -26,7 +29,7 @@ export class MeshEngine {
 
   onDirect?: (m: ChatMessage) => void;
 
-  constructor(private transport: Transport, private me: Identity) {
+  constructor(private transport: Transport, private me: Identity, private proofOfWork = false) {
     this.snapshot = this.build();
   }
 
@@ -52,10 +55,28 @@ export class MeshEngine {
     this.transport.stop();
   }
 
-  send(channel: string, text: string) {
+  async send(channel: string, text: string) {
     const body = text.trim();
     if (!body || !channel) return;
     const isDm = channel.startsWith('dm:');
+    const recipientId = isDm ? channel.slice(3) : undefined;
+    const recipientPeer = recipientId ? this.peers.get(recipientId) : undefined;
+
+    let outgoingBody = body;
+    let isEncrypted = false;
+
+    // E2EE for DMs if keys are available
+    if (isDm && this.me.privateKey && recipientPeer?.publicKey) {
+      outgoingBody = await encryptDirectMessage(body, this.me.privateKey, recipientPeer.publicKey);
+      isEncrypted = true;
+    }
+
+    let powNonce: number | undefined;
+    if (this.proofOfWork && !isDm) {
+      const pow = await computeProofOfWork(body, 2);
+      powNonce = pow.nonce;
+    }
+
     const p: Packet = {
       id: makeId(16),
       type: isDm ? 'dm' : 'chat',
@@ -64,12 +85,24 @@ export class MeshEngine {
       ts: Date.now(),
       from: this.me.id,
       fromName: this.me.name,
-      to: isDm ? channel.slice(3) : undefined,
+      publicKey: this.me.publicKey,
+      to: recipientId,
       channel: isDm ? undefined : channel,
-      body,
+      body: outgoingBody,
+      encrypted: isEncrypted,
+      powNonce,
     };
+
     this.remember(p.id);
-    this.addMessage(p, channel, true);
+
+    // Save local readable copy
+    this.addMessage(
+      { ...p, body },
+      channel,
+      true,
+      isEncrypted,
+    );
+
     this.transport.broadcast(p);
   }
 
@@ -83,12 +116,13 @@ export class MeshEngine {
       ts: Date.now(),
       from: this.me.id,
       fromName: this.me.name,
+      publicKey: this.me.publicKey,
     };
     this.remember(p.id);
     this.transport.broadcast(p);
   }
 
-  private receive(p: Packet) {
+  private async receive(p: Packet) {
     if (p.from === this.me.id || this.seen.has(p.id)) return;
     this.remember(p.id);
 
@@ -97,15 +131,26 @@ export class MeshEngine {
       this.peers.set(p.from, {
         id: p.from,
         name: p.fromName,
+        publicKey: p.publicKey,
         hops: p.hops + 1,
         lastSeen: Date.now(),
       });
       this.emit();
     } else if (p.type === 'chat' && p.channel) {
-      this.addMessage(p, p.channel, false);
+      this.addMessage(p, p.channel, false, false);
     } else if (p.type === 'dm' && p.to === this.me.id) {
       forMe = true;
-      const m = this.addMessage(p, `dm:${p.from}`, false);
+      let plainBody = p.body ?? '';
+      let decrypted = false;
+
+      // Attempt E2EE decryption
+      if (p.body?.startsWith('enc:v1:') && this.me.privateKey && p.publicKey) {
+        const res = await decryptDirectMessage(p.body, this.me.privateKey, p.publicKey);
+        plainBody = res.text;
+        decrypted = res.success;
+      }
+
+      const m = this.addMessage({ ...p, body: plainBody }, `dm:${p.from}`, false, decrypted);
       this.onDirect?.(m);
     }
 
@@ -115,7 +160,7 @@ export class MeshEngine {
     }
   }
 
-  private addMessage(p: Packet, channel: string, mine: boolean): ChatMessage {
+  private addMessage(p: Packet, channel: string, mine: boolean, encrypted = false): ChatMessage {
     const m: ChatMessage = {
       id: p.id,
       channel,
@@ -125,6 +170,7 @@ export class MeshEngine {
       ts: p.ts,
       hops: p.hops + 1,
       mine,
+      encrypted,
     };
     this.messages = [...this.messages, m].slice(-500);
     this.emit();

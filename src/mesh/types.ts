@@ -8,14 +8,18 @@ export interface Packet {
   ts: number;
   from: string;
   fromName: string;
+  publicKey?: string; // sender public key for E2EE
   to?: string; // dm only
   channel?: string; // chat only: 'mesh' or 'geo:<hash>'
   body?: string;
+  encrypted?: boolean;
+  powNonce?: number;
 }
 
 export interface Peer {
   id: string;
   name: string;
+  publicKey?: string;
   hops: number; // distance in hops (1 = direct neighbour)
   lastSeen: number;
 }
@@ -29,11 +33,21 @@ export interface ChatMessage {
   ts: number;
   hops: number;
   mine: boolean;
+  encrypted?: boolean;
 }
 
 export interface Identity {
   id: string;
   name: string;
+  publicKey?: string;
+  privateKey?: string;
+}
+
+export interface AppSettings {
+  theme: 'system' | 'light' | 'dark';
+  proofOfWork: boolean;
+  torRelay: boolean;
+  customGeohashes: string[];
 }
 
 export interface Transport {

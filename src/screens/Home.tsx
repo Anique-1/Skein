@@ -12,17 +12,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChannelBar, { Tab } from '../components/ChannelBar';
 import Composer from '../components/Composer';
+import GeohashMapPicker from '../components/GeohashMapPicker';
 import KnotMap from '../components/KnotMap';
 import MessageList from '../components/MessageList';
-import { METERS_PER_HOP, TRANSPORT } from '../config';
+import SkeinLogo from '../components/SkeinLogo';
+import { METERS_PER_HOP } from '../config';
 import { useArea } from '../location/useArea';
 import { BleTransport } from '../mesh/BleTransport';
-import { LoopbackTransport } from '../mesh/LoopbackTransport';
 import { MeshEngine } from '../mesh/MeshEngine';
-import { Identity } from '../mesh/types';
+import { AppSettings, Identity } from '../mesh/types';
 import { useEngineState } from '../mesh/useEngineState';
 import { notifyDirect } from '../notifications';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../storage';
 import { colors, fonts } from '../theme';
+import SettingsModal from './SettingsModal';
 
 export default function Home({ identity }: { identity: Identity }) {
   const { width } = useWindowDimensions();
@@ -30,6 +33,11 @@ export default function Home({ identity }: { identity: Identity }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState('mesh');
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customGeohashes, setCustomGeohashes] = useState<string[]>([]);
+
   const tabRef = useRef(tab);
   const area = useArea();
   const state = useEngineState(engine);
@@ -38,7 +46,20 @@ export default function Home({ identity }: { identity: Identity }) {
     tabRef.current = tab;
   }, [tab]);
 
-  // Start the mesh. If the real Bluetooth transport can't start, fall back to the demo mesh.
+  // Load persisted settings
+  useEffect(() => {
+    loadSettings().then((s) => {
+      setSettings(s);
+      if (s.customGeohashes) setCustomGeohashes(s.customGeohashes);
+    });
+  }, []);
+
+  const handleUpdateSettings = async (next: AppSettings) => {
+    setSettings(next);
+    await saveSettings(next);
+  };
+
+  // Start the real Bluetooth mesh engine
   useEffect(() => {
     let cancelled = false;
     let running: MeshEngine | null = null;
@@ -54,17 +75,16 @@ export default function Home({ identity }: { identity: Identity }) {
     };
 
     (async () => {
-      let e = new MeshEngine(
-        TRANSPORT === 'ble' ? new BleTransport() : new LoopbackTransport(),
-        identity,
-      );
+      const transport = new BleTransport();
+      const e = new MeshEngine(transport, identity, settings.proofOfWork);
       try {
         await e.start();
+        setNotice(null);
       } catch (err) {
-        e.stop();
-        setNotice(`${(err as Error).message}. Showing the demo mesh instead.`);
-        e = new MeshEngine(new LoopbackTransport(), identity);
-        await e.start();
+        setNotice(
+          (err as Error)?.message ||
+            'Bluetooth mesh could not start. Please ensure Bluetooth and permissions are enabled.',
+        );
       }
       if (cancelled) {
         e.stop();
@@ -79,10 +99,12 @@ export default function Home({ identity }: { identity: Identity }) {
       cancelled = true;
       running?.stop();
     };
-  }, [identity]);
+  }, [identity, settings.proofOfWork]);
 
-  const areaChannel = area.geohash ? `geo:${area.geohash}` : '';
-  const activeChannel = tab === 'area' ? areaChannel : tab;
+  const defaultAreaChannel = area.geohash ? `geo:${area.geohash}` : '';
+
+  // Determine active channel key
+  const activeChannel = tab === 'area' ? defaultAreaChannel : tab;
 
   const messages = useMemo(
     () => state.messages.filter((m) => m.channel === activeChannel),
@@ -92,6 +114,10 @@ export default function Home({ identity }: { identity: Identity }) {
   const tabs: Tab[] = [
     { key: 'mesh', label: 'Nearby' },
     { key: 'area', label: area.geohash ? `Area #${area.geohash}` : 'Area' },
+    ...customGeohashes.map((gh) => ({
+      key: `geo:${gh}`,
+      label: `#${gh}`,
+    })),
     ...state.peers.map((p) => ({
       key: `dm:${p.id}`,
       label: p.name,
@@ -104,6 +130,17 @@ export default function Home({ identity }: { identity: Identity }) {
     setUnread((u) => (u[key] ? { ...u, [key]: 0 } : u));
   };
 
+  const handleSelectGeohash = async (gh: string) => {
+    const clean = gh.toLowerCase().trim();
+    if (!clean) return;
+    if (!customGeohashes.includes(clean)) {
+      const nextList = [...customGeohashes, clean];
+      setCustomGeohashes(nextList);
+      await handleUpdateSettings({ ...settings, customGeohashes: nextList });
+    }
+    setTab(`geo:${clean}`);
+  };
+
   const peerName = (id: string) =>
     state.peers.find((p) => p.id === id)?.name ??
     state.messages.find((m) => m.from === id)?.fromName ??
@@ -111,16 +148,23 @@ export default function Home({ identity }: { identity: Identity }) {
 
   const farthest = state.peers.reduce((m, p) => Math.max(m, p.hops), 0);
   const isDm = tab.startsWith('dm:');
+  const isCustomGeo = tab.startsWith('geo:');
 
   let subtitle = 'Everyone in range. Messages hop from phone to phone, up to 7 times.';
   if (tab === 'area') subtitle = 'People in your neighborhood, about 1 km wide.';
-  if (isDm) subtitle = `Private message to ${peerName(tab.slice(3))}`;
+  if (isCustomGeo) subtitle = `Regional channel for #${tab.slice(4)}. Messages relay across nodes.`;
+  if (isDm) subtitle = `🔒 Private end-to-end encrypted message to ${peerName(tab.slice(3))}`;
 
   let empty: React.ReactNode = (
     <Text style={styles.emptyText}>
-      {isDm ? 'Say hello. Only this person will see it.' : 'No messages yet. Say hi to people nearby.'}
+      {isDm
+        ? 'Say hello. End-to-end encrypted. Only this person can read it.'
+        : isCustomGeo
+        ? `No messages yet in #${tab.slice(4)}. Say hi to this region.`
+        : 'No messages yet. Say hi to people nearby.'}
     </Text>
   );
+
   if (tab === 'area' && area.status !== 'ready') {
     empty = (
       <View style={styles.areaCard}>
@@ -150,39 +194,88 @@ export default function Home({ identity }: { identity: Identity }) {
   return (
     <SafeAreaView style={styles.root}>
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
+        {/* Header with Logo, Status, and Settings */}
         <View style={styles.header}>
-          <Text style={styles.brand}>skein</Text>
-          {state.transportLabel === 'Demo mesh' && (
-            <View style={styles.demo}>
-              <Text style={styles.demoText}>Demo mesh</Text>
+          <View style={styles.brandRow}>
+            <SkeinLogo size={32} animated={state.peers.length > 0} />
+            <Text style={styles.brand}>skein</Text>
+          </View>
+
+          <View style={styles.headerActions}>
+            <View style={styles.statusPill}>
+              <View style={[styles.statusDot, notice ? styles.statusDotError : styles.statusDotActive]} />
+              <Text style={styles.statusText}>{notice ? 'Bluetooth off' : 'BLE Active'}</Text>
             </View>
-          )}
+
+            <Pressable
+              onPress={() => setShowSettings(true)}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+            >
+              <Text style={styles.iconBtnText}>⚙️</Text>
+            </Pressable>
+          </View>
         </View>
 
         {notice && <Text style={styles.notice}>{notice}</Text>}
 
+        {/* Radar Knot Map */}
         <View style={styles.mapWrap}>
           <KnotMap peers={state.peers} width={width - 32} />
           <Text style={styles.reach}>
             {state.peers.length === 0
-              ? 'Looking for people nearby'
+              ? 'Looking for nearby Skein phones over Bluetooth...'
               : `${state.peers.length} ${state.peers.length === 1 ? 'person' : 'people'} in range. Farthest is ${farthest} hop${farthest === 1 ? '' : 's'} away, about ${farthest * METERS_PER_HOP} m.`}
           </Text>
         </View>
 
-        <ChannelBar tabs={tabs} active={tab} onSelect={select} />
+        {/* Channel Navigation with Map Picker Trigger */}
+        <ChannelBar
+          tabs={tabs}
+          active={tab}
+          onSelect={select}
+          onOpenMap={() => setShowMapPicker(true)}
+        />
+
         <Text style={styles.subtitle}>{subtitle}</Text>
 
+        {/* Messages */}
         <View style={styles.flex}>
           <MessageList messages={messages} empty={empty} />
         </View>
 
+        {/* Composer */}
         <Composer
-          placeholder={isDm ? `Message ${peerName(tab.slice(3))}` : 'Message people nearby'}
+          placeholder={
+            isDm
+              ? `Message ${peerName(tab.slice(3))}`
+              : isCustomGeo
+              ? `Message #${tab.slice(4)}`
+              : 'Message people nearby'
+          }
           disabled={!activeChannel || !engine}
           onSend={(text) => engine?.send(activeChannel, text)}
         />
       </KeyboardAvoidingView>
+
+      {/* Geohash Map Picker Modal */}
+      <GeohashMapPicker
+        visible={showMapPicker}
+        initialGeohash={area.geohash?.slice(0, 2) || '9q'}
+        onSelect={handleSelectGeohash}
+        onClose={() => setShowMapPicker(false)}
+      />
+
+      {/* Settings & Info Modal */}
+      <SettingsModal
+        visible={showSettings}
+        identity={identity}
+        peers={state.peers}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onClose={() => setShowSettings(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -193,19 +286,57 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 6,
   },
-  brand: { color: colors.paper, fontFamily: fonts.display, fontSize: 32, letterSpacing: -0.5 },
-  demo: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.knot,
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  demoText: { color: colors.knot, fontSize: 12, fontWeight: '600' },
+  brand: { color: colors.paper, fontFamily: fonts.display, fontSize: 30, letterSpacing: -0.5 },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.wool,
+    borderWidth: 1,
+    borderColor: colors.fiber,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusDotActive: {
+    backgroundColor: colors.knot,
+  },
+  statusDotError: {
+    backgroundColor: colors.alert,
+  },
+  statusText: { color: colors.mist, fontSize: 11, fontWeight: '600' },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.wool,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.fiber,
+  },
+  iconBtnText: {
+    fontSize: 14,
+  },
   notice: { color: colors.alert, fontSize: 12, paddingHorizontal: 20, paddingTop: 6 },
   mapWrap: {
     marginHorizontal: 16,

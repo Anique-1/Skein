@@ -10,14 +10,20 @@ function Row({ m }: { m: ChatMessage }) {
     return (
       <View style={[styles.bubble, styles.mine]}>
         <Text style={styles.mineText}>{m.body}</Text>
-        <Text style={styles.mineMeta}>{time}</Text>
+        <View style={styles.mineMetaRow}>
+          {m.encrypted && <Text style={styles.mineLock}>🔒 E2EE</Text>}
+          <Text style={styles.mineMeta}>{time}</Text>
+        </View>
       </View>
     );
   }
   const hopsLabel = `${m.hops} hop${m.hops === 1 ? '' : 's'}, about ${m.hops * METERS_PER_HOP} m`;
   return (
     <View style={[styles.bubble, styles.theirs]}>
-      <Text style={styles.name}>{m.fromName}</Text>
+      <View style={styles.nameRow}>
+        <Text style={styles.name}>{m.fromName}</Text>
+        {m.encrypted && <Text style={styles.lockBadge}>🔒 E2EE</Text>}
+      </View>
       <Text style={styles.text}>{m.body}</Text>
       <View style={styles.metaRow} accessible accessibilityLabel={`${hopsLabel}, ${time}`}>
         <View style={styles.stitches}>
@@ -68,11 +74,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.wool,
     borderRadius: 18,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.fiber,
   },
-  name: { color: colors.thread, fontSize: 12, fontWeight: '700', marginBottom: 2 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+    gap: 8,
+  },
+  name: { color: colors.thread, fontSize: 12, fontWeight: '700' },
+  lockBadge: { color: colors.knot, fontSize: 10, fontWeight: '700' },
   text: { color: colors.paper, fontSize: 16, lineHeight: 22 },
   mineText: { color: colors.ink, fontSize: 16, lineHeight: 22 },
-  mineMeta: { color: '#6B5A2E', fontSize: 11, marginTop: 4, textAlign: 'right' },
+  mineMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 4,
+  },
+  mineLock: { color: '#6B5A2E', fontSize: 10, fontWeight: '700' },
+  mineMeta: { color: '#6B5A2E', fontSize: 11, textAlign: 'right' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   stitches: { flexDirection: 'row', gap: 3 },
   stitch: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.thread },

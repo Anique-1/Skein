@@ -9,7 +9,7 @@
     "scheme": "skein",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#15111F"
     },
@@ -27,7 +27,7 @@
     "android": {
       "package": "com.skein.mesh",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#15111F"
       },
       "permissions": [

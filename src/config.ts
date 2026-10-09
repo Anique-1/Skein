@@ -1,6 +1,5 @@
-// 'demo'  -> simulated people, runs in Expo Go, good for UI work.
-// 'ble'   -> real Bluetooth transport (needs a dev build + native GATT code, see README).
-export const TRANSPORT: 'demo' | 'ble' = 'ble';
+// Real offline Bluetooth Low Energy transport
+export const TRANSPORT = 'ble' as const;
 
 export const MAX_TTL = 7; // maximum relays for one message
 export const ANNOUNCE_EVERY_MS = 8000; // "I'm here" beacon

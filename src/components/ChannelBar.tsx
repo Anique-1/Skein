@@ -12,10 +12,12 @@ export default function ChannelBar({
   tabs,
   active,
   onSelect,
+  onOpenMap,
 }: {
   tabs: Tab[];
   active: string;
   onSelect: (key: string) => void;
+  onOpenMap?: () => void;
 }) {
   return (
     <ScrollView
@@ -43,6 +45,17 @@ export default function ChannelBar({
           </Pressable>
         );
       })}
+
+      {onOpenMap && (
+        <Pressable
+          onPress={onOpenMap}
+          accessibilityRole="button"
+          accessibilityLabel="Open Geohash Map Picker"
+          style={styles.mapBtn}
+        >
+          <Text style={styles.mapBtnText}>🗺️ + Area</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -72,4 +85,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: { color: colors.ink, fontSize: 11, fontWeight: '700' },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.wool,
+    borderWidth: 1,
+    borderColor: colors.knot,
+  },
+  mapBtnText: {
+    color: colors.knot,
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });

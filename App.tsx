@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initNotifications } from './src/notifications';
@@ -7,8 +7,9 @@ import { makeId } from './src/mesh/ids';
 import { Identity } from './src/mesh/types';
 import Home from './src/screens/Home';
 import Onboarding from './src/screens/Onboarding';
+import SkeinLogo from './src/components/SkeinLogo';
 import { loadState, randomName, saveState } from './src/storage';
-import { colors } from './src/theme';
+import { colors, fonts } from './src/theme';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -17,7 +18,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      // Initialize notifications lazily so Expo Go doesn't crash at startup.
+      // Initialize notifications
       initNotifications().catch(() => {});
       const saved = await loadState();
       if (saved) {
@@ -42,8 +43,10 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       {!ready || !identity ? (
-        <View style={{ flex: 1, backgroundColor: colors.ink, justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.thread} />
+        <View style={styles.splashContainer}>
+          <SkeinLogo size={120} animated={true} />
+          <Text style={styles.splashBrand}>skein</Text>
+          <Text style={styles.splashTagline}>offline bluetooth mesh</Text>
         </View>
       ) : onboarded ? (
         <Home identity={identity} />
@@ -53,3 +56,27 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    backgroundColor: colors.ink,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  splashBrand: {
+    color: colors.paper,
+    fontFamily: fonts.display,
+    fontSize: 36,
+    letterSpacing: -0.5,
+    marginTop: 8,
+  },
+  splashTagline: {
+    color: colors.mist,
+    fontSize: 13,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+});
+
