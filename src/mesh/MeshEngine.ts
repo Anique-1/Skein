@@ -1,7 +1,6 @@
 import { ANNOUNCE_EVERY_MS, MAX_TTL, PEER_TIMEOUT_MS, SEEN_CACHE_SIZE } from '../config';
 import { decryptDirectMessage, encryptDirectMessage } from './crypto';
 import { makeId } from './ids';
-import { computeProofOfWork } from './pow';
 import { ChatMessage, Identity, Packet, Peer, Transport } from './types';
 
 export interface EngineState {
@@ -29,7 +28,7 @@ export class MeshEngine {
 
   onDirect?: (m: ChatMessage) => void;
 
-  constructor(private transport: Transport, private me: Identity, private proofOfWork = false) {
+  constructor(private transport: Transport, private me: Identity) {
     this.snapshot = this.build();
   }
 
@@ -71,12 +70,6 @@ export class MeshEngine {
       isEncrypted = true;
     }
 
-    let powNonce: number | undefined;
-    if (this.proofOfWork && !isDm) {
-      const pow = await computeProofOfWork(body, 2);
-      powNonce = pow.nonce;
-    }
-
     const p: Packet = {
       id: makeId(16),
       type: isDm ? 'dm' : 'chat',
@@ -90,7 +83,6 @@ export class MeshEngine {
       channel: isDm ? undefined : channel,
       body: outgoingBody,
       encrypted: isEncrypted,
-      powNonce,
     };
 
     this.remember(p.id);

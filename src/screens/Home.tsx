@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ChannelBar, { Tab } from '../components/ChannelBar';
 import Composer from '../components/Composer';
-import GeohashMapPicker from '../components/GeohashMapPicker';
 import KnotMap from '../components/KnotMap';
 import MessageList from '../components/MessageList';
 import SkeinLogo from '../components/SkeinLogo';
@@ -20,10 +19,9 @@ import { METERS_PER_HOP } from '../config';
 import { useArea } from '../location/useArea';
 import { BleTransport } from '../mesh/BleTransport';
 import { MeshEngine } from '../mesh/MeshEngine';
-import { AppSettings, Identity } from '../mesh/types';
+import { Identity } from '../mesh/types';
 import { useEngineState } from '../mesh/useEngineState';
 import { notifyDirect } from '../notifications';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../storage';
 import { colors, fonts } from '../theme';
 import SettingsModal from './SettingsModal';
 
@@ -33,10 +31,7 @@ export default function Home({ identity }: { identity: Identity }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState('mesh');
   const [unread, setUnread] = useState<Record<string, number>>({});
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [showMapPicker, setShowMapPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [customGeohashes, setCustomGeohashes] = useState<string[]>([]);
 
   const tabRef = useRef(tab);
   const area = useArea();
@@ -45,19 +40,6 @@ export default function Home({ identity }: { identity: Identity }) {
   useEffect(() => {
     tabRef.current = tab;
   }, [tab]);
-
-  // Load persisted settings
-  useEffect(() => {
-    loadSettings().then((s) => {
-      setSettings(s);
-      if (s.customGeohashes) setCustomGeohashes(s.customGeohashes);
-    });
-  }, []);
-
-  const handleUpdateSettings = async (next: AppSettings) => {
-    setSettings(next);
-    await saveSettings(next);
-  };
 
   // Start the real Bluetooth mesh engine
   useEffect(() => {
@@ -76,7 +58,7 @@ export default function Home({ identity }: { identity: Identity }) {
 
     (async () => {
       const transport = new BleTransport();
-      const e = new MeshEngine(transport, identity, settings.proofOfWork);
+      const e = new MeshEngine(transport, identity);
       try {
         await e.start();
         setNotice(null);
@@ -99,11 +81,9 @@ export default function Home({ identity }: { identity: Identity }) {
       cancelled = true;
       running?.stop();
     };
-  }, [identity, settings.proofOfWork]);
+  }, [identity]);
 
   const defaultAreaChannel = area.geohash ? `geo:${area.geohash}` : '';
-
-  // Determine active channel key
   const activeChannel = tab === 'area' ? defaultAreaChannel : tab;
 
   const messages = useMemo(
@@ -114,10 +94,6 @@ export default function Home({ identity }: { identity: Identity }) {
   const tabs: Tab[] = [
     { key: 'mesh', label: 'Nearby' },
     { key: 'area', label: area.geohash ? `Area #${area.geohash}` : 'Area' },
-    ...customGeohashes.map((gh) => ({
-      key: `geo:${gh}`,
-      label: `#${gh}`,
-    })),
     ...state.peers.map((p) => ({
       key: `dm:${p.id}`,
       label: p.name,
@@ -130,17 +106,6 @@ export default function Home({ identity }: { identity: Identity }) {
     setUnread((u) => (u[key] ? { ...u, [key]: 0 } : u));
   };
 
-  const handleSelectGeohash = async (gh: string) => {
-    const clean = gh.toLowerCase().trim();
-    if (!clean) return;
-    if (!customGeohashes.includes(clean)) {
-      const nextList = [...customGeohashes, clean];
-      setCustomGeohashes(nextList);
-      await handleUpdateSettings({ ...settings, customGeohashes: nextList });
-    }
-    setTab(`geo:${clean}`);
-  };
-
   const peerName = (id: string) =>
     state.peers.find((p) => p.id === id)?.name ??
     state.messages.find((m) => m.from === id)?.fromName ??
@@ -148,19 +113,15 @@ export default function Home({ identity }: { identity: Identity }) {
 
   const farthest = state.peers.reduce((m, p) => Math.max(m, p.hops), 0);
   const isDm = tab.startsWith('dm:');
-  const isCustomGeo = tab.startsWith('geo:');
 
   let subtitle = 'Everyone in range. Messages hop from phone to phone, up to 7 times.';
   if (tab === 'area') subtitle = 'People in your neighborhood, about 1 km wide.';
-  if (isCustomGeo) subtitle = `Regional channel for #${tab.slice(4)}. Messages relay across nodes.`;
   if (isDm) subtitle = `🔒 Private end-to-end encrypted message to ${peerName(tab.slice(3))}`;
 
   let empty: React.ReactNode = (
     <Text style={styles.emptyText}>
       {isDm
         ? 'Say hello. End-to-end encrypted. Only this person can read it.'
-        : isCustomGeo
-        ? `No messages yet in #${tab.slice(4)}. Say hi to this region.`
         : 'No messages yet. Say hi to people nearby.'}
     </Text>
   );
@@ -230,13 +191,8 @@ export default function Home({ identity }: { identity: Identity }) {
           </Text>
         </View>
 
-        {/* Channel Navigation with Map Picker Trigger */}
-        <ChannelBar
-          tabs={tabs}
-          active={tab}
-          onSelect={select}
-          onOpenMap={() => setShowMapPicker(true)}
-        />
+        {/* Channel Navigation */}
+        <ChannelBar tabs={tabs} active={tab} onSelect={select} />
 
         <Text style={styles.subtitle}>{subtitle}</Text>
 
@@ -250,8 +206,6 @@ export default function Home({ identity }: { identity: Identity }) {
           placeholder={
             isDm
               ? `Message ${peerName(tab.slice(3))}`
-              : isCustomGeo
-              ? `Message #${tab.slice(4)}`
               : 'Message people nearby'
           }
           disabled={!activeChannel || !engine}
@@ -259,21 +213,11 @@ export default function Home({ identity }: { identity: Identity }) {
         />
       </KeyboardAvoidingView>
 
-      {/* Geohash Map Picker Modal */}
-      <GeohashMapPicker
-        visible={showMapPicker}
-        initialGeohash={area.geohash?.slice(0, 2) || '9q'}
-        onSelect={handleSelectGeohash}
-        onClose={() => setShowMapPicker(false)}
-      />
-
       {/* Settings & Info Modal */}
       <SettingsModal
         visible={showSettings}
         identity={identity}
         peers={state.peers}
-        settings={settings}
-        onUpdateSettings={handleUpdateSettings}
         onClose={() => setShowSettings(false)}
       />
     </SafeAreaView>

@@ -13,7 +13,6 @@ export interface Packet {
   channel?: string; // chat only: 'mesh' or 'geo:<hash>'
   body?: string;
   encrypted?: boolean;
-  powNonce?: number;
 }
 
 export interface Peer {
@@ -41,13 +40,6 @@ export interface Identity {
   name: string;
   publicKey?: string;
   privateKey?: string;
-}
-
-export interface AppSettings {
-  theme: 'system' | 'light' | 'dark';
-  proofOfWork: boolean;
-  torRelay: boolean;
-  customGeohashes: string[];
 }
 
 export interface Transport {

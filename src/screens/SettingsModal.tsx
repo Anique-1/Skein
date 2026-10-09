@@ -9,15 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SkeinLogo from '../components/SkeinLogo';
-import { AppSettings, Identity, Peer } from '../mesh/types';
+import { Identity, Peer } from '../mesh/types';
 import { colors, fonts } from '../theme';
 
 interface SettingsModalProps {
   visible: boolean;
   identity: Identity;
   peers: Peer[];
-  settings: AppSettings;
-  onUpdateSettings: (settings: AppSettings) => void;
   onClose: () => void;
 }
 
@@ -25,18 +23,8 @@ export default function SettingsModal({
   visible,
   identity,
   peers,
-  settings,
-  onUpdateSettings,
   onClose,
 }: SettingsModalProps) {
-  const setAppearance = (theme: 'system' | 'light' | 'dark') => {
-    onUpdateSettings({ ...settings, theme });
-  };
-
-  const setPow = (proofOfWork: boolean) => {
-    onUpdateSettings({ ...settings, proofOfWork });
-  };
-
   const pubKeyPreview = identity.publicKey
     ? `${identity.publicKey.slice(0, 8)}...${identity.publicKey.slice(-8)}`
     : 'generating...';
@@ -75,12 +63,12 @@ export default function SettingsModal({
             </View>
 
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🌐</Text>
+              <Text style={styles.featureIcon}>📍</Text>
               <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Geohash Area Channels</Text>
+                <Text style={styles.featureTitle}>Local Area Chat</Text>
                 <Text style={styles.featureDesc}>
-                  Connect with people in your area using geohash-based channels. Select custom regions
-                  and neighborhoods directly on the map.
+                  Automatic area channels based on rough local geohash. Your exact GPS coordinates are
+                  never saved or broadcast.
                 </Text>
               </View>
             </View>
@@ -90,55 +78,11 @@ export default function SettingsModal({
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>End-to-End Encryption</Text>
                 <Text style={styles.featureDesc}>
-                  Private messages are cryptographically encrypted. Channel messages are public to
-                  the selected area.
+                  Private 1-to-1 direct messages are cryptographically encrypted. Broadcast nearby
+                  messages are public.
                 </Text>
               </View>
             </View>
-          </View>
-
-          {/* Appearance Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>appearance</Text>
-            <View style={styles.toggleRow}>
-              {(['system', 'light', 'dark'] as const).map((t) => (
-                <Pressable
-                  key={t}
-                  onPress={() => setAppearance(t)}
-                  style={[styles.toggleBtn, settings.theme === t && styles.toggleBtnActive]}
-                >
-                  <Text style={[styles.toggleText, settings.theme === t && styles.toggleTextActive]}>
-                    {t}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Proof of Work Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>proof of work</Text>
-            <View style={styles.toggleRow}>
-              <Pressable
-                onPress={() => setPow(false)}
-                style={[styles.toggleBtn, !settings.proofOfWork && styles.toggleBtnActive]}
-              >
-                <Text style={[styles.toggleText, !settings.proofOfWork && styles.toggleTextActive]}>
-                  pow off
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setPow(true)}
-                style={[styles.toggleBtn, settings.proofOfWork && styles.toggleBtnActive]}
-              >
-                <Text style={[styles.toggleText, settings.proofOfWork && styles.toggleTextActive]}>
-                  pow on
-                </Text>
-              </Pressable>
-            </View>
-            <Text style={styles.sectionHint}>
-              add proof of work to geohash messages for spam deterrence.
-            </Text>
           </View>
 
           {/* Mesh Diagnostic Terminal Status Card */}
@@ -267,35 +211,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.5,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  toggleBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: colors.wool,
-    borderWidth: 1,
-    borderColor: colors.fiber,
-  },
-  toggleBtnActive: {
-    backgroundColor: colors.thread,
-    borderColor: colors.thread,
-  },
-  toggleText: {
-    color: colors.mist,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  toggleTextActive: {
-    color: colors.ink,
-  },
-  sectionHint: {
-    color: colors.mist,
-    fontSize: 12,
-    lineHeight: 16,
   },
   terminalCard: {
     backgroundColor: '#0D0A14',
